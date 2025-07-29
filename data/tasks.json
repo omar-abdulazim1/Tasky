@@ -1,0 +1,14 @@
+[
+  {
+    "id": "1751191458621",
+    "title": "Buy milk",
+    "completed": false
+  },
+  {
+    "id": "1753743532994",
+    "title": "Finish Node.js project",
+    "due": "2025-07-10",
+    "description": "Complete the task manager backend using Express",
+    "completed": false
+  }
+]
