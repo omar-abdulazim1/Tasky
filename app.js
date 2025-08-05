@@ -1,5 +1,7 @@
 const express = require("express");
 const tasky= express();
+const connectDB = require("./config/db");
+connectDB();
 const port = 3000;
 
 // Middleware to parse incoming JSON requests

@@ -1,16 +1,11 @@
 const joi = require ("joi");
 const bcrypt = require("bcrypt");
-
-const {
-    loadUsers,
-    saveUsers
-} = require ("../models/userModel");
+const user = require ("../models/userModel");
 
 //registeration function
 async function reg (req, res)
 {
-const users= await loadUsers();
-
+//validate input
 const userSchema = joi.object({
 fName: joi.string().required(),
 sName: joi.string().required(),
@@ -22,54 +17,60 @@ const result = userSchema.validate(req.body);
 if (result.error) 
   return res.status(400).send(result.error.details[0].message);
 
+  const { fName, sName, email, password } = result.value;
+
+  try{
 //Check if the email already exists
-const emailExist = users.find (user => user.email === result.value.email);
-if (emailExist)
+const existingUser = await user.findOne ({email});
+if (existingUser)
     return res.status(409).send("This email is already registered");
 
 //Hash the password
-const hashedPassword = await bcrypt.hash(result.value.password, 10);
+const hashedPassword = await bcrypt.hash(password, 10);
 
-    const newUser = {
-    ...result.value,
+//create and save the user
+    const newUser = new user ({
+          fName,
+      sName,
+      email,
     password: hashedPassword,
-        userID: Date.now(),
-    createdDate: new Date().toISOString()
-};
+            });
 
-    users.push(newUser);
-
-    saveUsers(users);
+    await newUser.save();
     return res.status(201).send("User created successfully");
+        }catch (err) {
+            return res.status(500).send("Something went wrong.");
+        }
 }
 
 //user login 
 async function login (req, res)
 {
-const users= await loadUsers();
 const {email, password} = req.body;
-//email checking
-const findUser= users.find(user=> user.email === email);
+
+try {
+//find user by email
+const findUser= await user.findOne({email});
 if (!findUser)
     return res.status(400).send("The email is not exist");
 
 //password checking
 const passMatch = await bcrypt.compare (password, findUser.password);
 if (!passMatch)
-    return res.status(400).send("The password is not exist");
+    return res.status(400).send("Incorrect password");
 
 return res.status(200).send("loggin successful");
+} catch (err) {
+    return res.status(500).send("Something went wrong during login");
+}
 }
 
 //listing all users
-async function getUsers(req, res)
-{
+async function getUsers(req, res){
     try {
-    const getALLUsers= await loadUsers();
-    const safeUsers = getALLUsers.map(({ password, ...rest }) => rest);
-return res.json(safeUsers);
-    } catch (err)
-    {
+        const users = await user.find({}, "-password");
+        return res.json(users);
+    } catch (err) {
         return res.status(500).send("Failed to load users");
     }
 }
@@ -77,40 +78,44 @@ return res.json(safeUsers);
 //updating a user
 async function updateUser (req, res)
 {
-const users= await loadUsers();
-
-//find the user by ID
-const userID = Number(req.params.userID);
-const findUser = users.find(user => user.userID === userID);
-if (!findUser) return res.status(404).send("This user is not exist");
-
-//extracting the new data
+const userID = req.params.id;
 const {fName, sName, email, password} = req.body;
-//Update the user’s data safely
 
-if (fName) findUser.fName = fName;
-if (sName) findUser.sName = sName;
-if (email) findUser.email = email;
-if (password) findUser.password = password; // later, you can hash this
+try {
+    const users = await user.findById (userID);
+if (!users) return res.status(404).send("User not found");
 
-await saveUsers(users);
-return res.status(200).send("User updated successfully");
+//Update the provided fields
+if (fName) users.fName = fName;
+    if (sName) users.sName = sName;
+    if (email) users.email = email;
+    if (password) {
+      const hashedPass = await bcrypt.hash(password, 10);
+      users.password = hashedPass;
+    }
+
+    //Save changes
+    await users.save();
+    return res.status(200).send("User updated successfully");
+} catch (err) {
+    return res.status(500).send("Failed to update user");
+}
 }
 
 //deleting a user
 async function deleteUser(req, res)
 {
-const users= await loadUsers();
+const userID = req.params.id;
 
-//Find the user by his id
-const userID= Number(req.params.userID);
-const findUser = users.find (user => user.userID === userID);
-if (!findUser) return res.status(404).send("The user is not exist");
+try {
+    const deletedUser = await user.findByIdAndDelete(userID);
+        if (!deletedUser)
+      return res.status(404).send("User not found");
 
-//filtering the users
-const updatedUsers = users.filter(user => user.userID != userID);
-await saveUsers(updatedUsers);
-  return res.status(200).send("User deleted successfully");
+    return res.status(200).send("User deleted successfully");
+  } catch (err) {
+    return res.status(500).send("Failed to delete user");
+}
 }
 
 module.exports = {

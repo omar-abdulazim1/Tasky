@@ -1,22 +1,39 @@
-const fs = require("fs/promises");
-const path = require("path");
-const usersPath = path.join(__dirname, "../data/users.json");
+const mongoose = require("mongoose");
 
-//load users from json file
-async function loadUsers ()
-{
-const readUsers = await fs.readFile(usersPath, "utf-8");
-return JSON.parse(readUsers);
-}
+const userSchema = new mongoose.Schema({
+  fName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  sName: {
+    type: String,
+    required: true,
+    trim: true,
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+  },
+  password: {
+    type: String,
+    required: true,
+  },
+  createdDate: {
+    type: String,
+    default: () => {
+      const now = new Date();
+      const day = now.getDate();
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
+  }
+});
 
-//save users
-async function saveUsers (users)
-{
-    const json = JSON.stringify(users, null, 2);
-await     fs.writeFile (usersPath, json);
-}
+const User = mongoose.model("User", userSchema);
 
-module.exports = {
-    loadUsers,
-    saveUsers
-};
+module.exports = User;

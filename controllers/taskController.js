@@ -1,73 +1,84 @@
-const { loadTasks, saveTasks } = require("../models/taskModel");
+const joi = require("joi");
+const tasks = require("../models/taskModel");
 
 //Get all tasks
 async function getAllTasks(req, res) {
-  const getTasks = await loadTasks();
-  res.json(getTasks);
+  try {
+    const allTasks = await tasks.find({});
+    return res.status(200).json(allTasks);
+  } catch (err) {
+    return res.status(500).send("Failed to find tasks");
+  }
 }
 
 //Add a task
 async function addTask(req, res) {
-  const tasks = await loadTasks();
+const taskSchema = joi.object ({
+user: joi.string().required(),
+  title: joi.string().required(),
+due: joi.date().required(),
+priority: joi.string().valid("low", "medium", "high").required(),
+description: joi.string().allow("").optional(),
+status: joi.string().valid("completed", "incompleted").required()
+})
 
-  const {title, description, due} = req.body;
+const result = taskSchema.validate(req.body);
+if (result.error) 
+  return res.status(400).send(result.error.details[0].message);
 
-  //input validation
-  if (!title?.trim() || !due?.trim()) 
-return res.status(400).json({error: "Fill out all the fields" });
+const {title, due, priority, description, status} = result.value;
+try {
+const newTask = new tasks ({
+  title,
+  due,
+  priority,
+  description,
+  status
+});
 
-//converting due into date
-const deadline= new Date (due)
-  
-//date validation
-if (isNaN(deadline.getTime()))
-return res.status(400).json ({error: "The due is invalid"});
-
-    const newTask = {
-    taskID: Date.now(),
-    title: title.trim(),
-    due: due,
-    description: description.trim(),
-    completed: false,
-  };
-  tasks.push(newTask);
-  await saveTasks(tasks);
-  res.status(201).json(newTask);
+await newTask.save();
+return res.status (201).send("The task created successfully");
+} catch (err) {
+  return res.status(500).send("Faild to create the task");
+}
 }
 
 // Update a task by ID
 async function updateTask(req, res) {
-  const tasks = await loadTasks();
-  
-  //find the task by ID
-  const taskID = Number(req.params.taskID);
-  const findTask = tasks.find(task => task.taskID === taskID);
-  if (!findTask) return res.status(404).send("The task is not exist");
+const taskID = req.params.id;
+  const {title, due, priority, description, status} = req.body;
 
-  //extract the task data
-  const {title, description, due, completed} = req.body;
+  try {
+  const findTask = await tasks.findById(taskID);  
+if(!findTask)
+  return res.status(404).send("The task is not found");
 
-  //update the data
-  if (title) findTask.title = title;
-  if (description) findTask.description = description;
-  if (due)  findTask.due = due;
-    if (completed) findTask.completed = completed;
+//updating the provided fields
+  if (title) findTask .title = title;
+  if (due)  findTask .due = due;
+  if(priority) findTask .priority = priority;
+  if (description) findTask .description = description;
+    if (status) findTask .status= status;
   
-  await saveTasks(tasks);
+  await findTask .save();
   return res.status(200).send("The task is updated successfully");
+} catch (err) {
+  return res.status(500).send("Something went wrong");
+}
 }
 
 // Delete a task by ID
 async function deleteTask(req, res) {
-  const tasks = await loadTasks();
-  const taskID = Number(req.params.taskID);
-  const findTask = tasks.find(task => task.taskID === taskID);
+  const taskID = req.params.id;
 
-  if (!findTask) return res.status(404).send("The task is not exist");
+  try {
+    const findTask = await tasks.findByIdAndDelete (taskID);
+if(!findTask) return res.status(404).send("The task is not found");
 
-  const deletedTask = tasks.filter (task => task.taskID != taskID);
-  await saveTasks(deletedTask);
-  return res.status(200).send("The task deleted successfully");
+    return res.status(200).send("The task is deleted successfully");
+  } catch (err) {
+    return res.status(500).send("Something went wrong");
+  }
 }
 
 module.exports = {

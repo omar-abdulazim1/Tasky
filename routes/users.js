@@ -13,7 +13,7 @@ const {
 router.get ("/", getUsers);
 router.post ("/register", reg);
 router.post("/login", login);
-router.put("/:userID", updateUser);
-router.delete("/:userID", deleteUser);
+router.put("/:id", updateUser);
+router.delete("/:id", deleteUser);
 
 module.exports = router;

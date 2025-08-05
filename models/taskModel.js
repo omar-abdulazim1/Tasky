@@ -1,17 +1,42 @@
-const fs = require("fs/promises");
-const path = require("path");
-const tasksFilePath = path.join(__dirname, "../data/tasks.json");
+const mongoose = require("mongoose");
 
-// load tasks from the JSON file
-async function loadTasks() {
-  const readTasks = await fs.readFile(tasksFilePath, "utf-8");
-  return JSON.parse(readTasks);
+const taskSchema = new mongoose.Schema ({
+user: {
+type: mongoose.Schema.Types.ObjectId,
+  ref: 'User',
+  required: true
+},
+  title: {
+  type: String,
+  required: true,
+  trim: true
+},
+due: {
+  type: Date,
+  required: true
+},
+priority: {
+type: String,
+enum: ['low', 'medium', 'high'],
+default: 'medium',
+required: true
+},
+description: {
+  type: String,
+  trim: true
+},
+createdDate: {
+  type: String,
+  default: () => {
+    const taskDate= new Date();
+    const day = taskDate.getDate();
+    const month = taskDate.getMonth() + 1;
+    const year = taskDate.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
 }
+});
 
-// save tasks to the JSON file
-async function saveTasks(task) {
-  const json = JSON.stringify(task, null, 2);
-  await fs.writeFile(tasksFilePath, json);
-}
+const Task = mongoose.model("Task", taskSchema);
 
-module.exports = { loadTasks, saveTasks };
+module.exports= Task;
