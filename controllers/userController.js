@@ -1,9 +1,11 @@
 const joi = require ("joi");
 const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const secretKey = process.env.SECRET_key;
 const user = require ("../models/userModel");
 
 //registeration function
-async function reg (req, res)
+async function reg (req, res, next)
 {
 //validate input
 const userSchema = joi.object({
@@ -39,46 +41,112 @@ const hashedPassword = await bcrypt.hash(password, 10);
     await newUser.save();
     return res.status(201).send("User created successfully");
         }catch (err) {
-            return res.status(500).send("Something went wrong.");
+            next(err);
         }
 }
 
-//user login 
-async function login (req, res)
+//user   login
+async function login (req, res, next)
 {
 const {email, password} = req.body;
 
 try {
 //find user by email
 const findUser= await user.findOne({email});
+
 if (!findUser)
     return res.status(400).send("The email is not exist");
+if (findUser.lockedUntil && findUser.lockedUntil > Date.now()) {
+  return res.status(403).send("Account temporarily locked due to multiple failed login attempts. Try again later.");
+}
 
 //password checking
 const passMatch = await bcrypt.compare (password, findUser.password);
-if (!passMatch)
-    return res.status(400).send("Incorrect password");
+if (!passMatch) {
+  findUser.loginAttempts += 1;
 
-return res.status(200).send("loggin successful");
+  if (findUser.loginAttempts >= 5) {
+    findUser.lockedUntil = Date.now() + 15 * 60 * 1000; // lock for 15 minutes
+    await findUser.save();
+    return res.status(403).send("Too many failed attempts. Account locked for 15 minutes.");
+  }
+
+  await findUser.save();
+  return res.status(400).send("Incorrect password");
+}
+
+findUser.loginAttempts = 0;
+findUser.lockedUntil = null;
+await findUser.save();
+
+
+const accessToken = jwt.sign(
+{ id: findUser._id},
+secretKey,
+{expiresIn: "15m"}
+);
+
+const refreshToken = jwt.sign (
+    {id: findUser._id},
+    secretKey,
+    {expiresIn: "30d"}
+);
+
+return res.status(200)
+.cookie ("refreshToken", refreshToken,
+    {
+        httpOnly: true,
+        secure: true,
+        sameSite: "strict",
+        maxAge: 30 * 24 * 60 * 60 * 1000
+    })
+.json ({
+message: "Login successful",
+accessToken,
+});
 } catch (err) {
-    return res.status(500).send("Something went wrong during login");
+    next(err);
+}
+}
+
+//user logout
+async function logout(req, res) {
+  res.clearCookie("refreshToken", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict"
+  }).send("Logged out successfully");
+}
+
+
+//user profile
+async function userProfile (req, res, next)
+{
+try {
+    const findUser = await user.findById(req.user.id).select("-password");
+if (!findUser)
+    return res.status(404).send("User not found");
+
+res.json(findUser);
+} catch (err) {
+    next(err);
 }
 }
 
 //listing all users
-async function getUsers(req, res){
+async function getUsers(req, res, next){
     try {
         const users = await user.find({}, "-password");
         return res.json(users);
     } catch (err) {
-        return res.status(500).send("Failed to load users");
+        next(err);
     }
 }
 
 //updating a user
-async function updateUser (req, res)
+async function updateUser (req, res, next)
 {
-const userID = req.params.id;
+const userID = req.user.id;
 const {fName, sName, email, password} = req.body;
 
 try {
@@ -98,14 +166,14 @@ if (fName) users.fName = fName;
     await users.save();
     return res.status(200).send("User updated successfully");
 } catch (err) {
-    return res.status(500).send("Failed to update user");
+    next(err);
 }
 }
 
 //deleting a user
-async function deleteUser(req, res)
+async function deleteUser(req, res, next)
 {
-const userID = req.params.id;
+const userID = req.user.id;
 
 try {
     const deletedUser = await user.findByIdAndDelete(userID);
@@ -114,14 +182,38 @@ try {
 
     return res.status(200).send("User deleted successfully");
   } catch (err) {
-    return res.status(500).send("Failed to delete user");
+    next(err);
 }
+}
+
+async function refreshToken(req, res, next) {
+  const token = req.cookies.refreshToken;
+
+  if (!token)
+    return res.status(401).send("Refresh token not found");
+
+  try {
+    const decoded = jwt.verify(token, secretKey);
+
+    const newAccessToken = jwt.sign(
+      { id: decoded.id },
+      secretKey,
+      { expiresIn: "15m" }
+    );
+
+    res.json({ accessToken: newAccessToken });
+  } catch (err) {
+    next(err);
+  }
 }
 
 module.exports = {
 reg,
 login,
+logout,
+userProfile,
 getUsers,
 updateUser,
-deleteUser
+deleteUser,
+refreshToken
 };

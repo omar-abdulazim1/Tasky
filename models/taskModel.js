@@ -16,9 +16,9 @@ due: {
   required: true
 },
 priority: {
-type: String,
-enum: ['low', 'medium', 'high'],
-default: 'medium',
+type: Number,
+enum: [1, 2, 3],
+default: 2,
 required: true
 },
 description: {

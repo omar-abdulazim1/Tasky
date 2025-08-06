@@ -30,8 +30,16 @@ const userSchema = new mongoose.Schema({
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
       return `${day}/${month}/${year}`;
-    }
-  }
+    },
+  },
+  loginAttempts: {
+  type: Number,
+  default: 0
+},
+lockedUntil: {
+  type: Date,
+  default: null
+}
 });
 
 const User = mongoose.model("User", userSchema);
